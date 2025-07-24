@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: kargo-blue-green
+  namespace: argocd
+spec:
+  generators:
+  - git:
+      repoURL: https://github.com/akuity/kargo-blue-green.git
+      revision: HEAD
+      directories:
+      - path: env/*
+  template:
+    metadata:
+      name: "{{path.basename}}"
+      annotations:
+        kargo.akuity.io/authorized-stage: kargo-blue-green:app
+    spec:
+      project: kargo-blue-green
+      source:
+        repoURL: https://github.com/akuity/kargo-blue-green.git
+        targetRevision: HEAD
+        path: ./env/{{path.basename}}
+      destination:
+        namespace: kargo-blue-green
+        name: demo
+      syncPolicy:
+        syncOptions:
+        - CreateNamespace=true

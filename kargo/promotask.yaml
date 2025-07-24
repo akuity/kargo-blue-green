@@ -1,0 +1,98 @@
+apiVersion: kargo.akuity.io/v1alpha1
+kind: PromotionTask
+metadata:
+  name: promote
+  namespace: kargo-blue-green
+spec:
+  vars:
+  - name: repoURL
+    value: https://github.com/akuity/kargo-blue-green.git
+  - name: image
+    value: ghcr.io/akuity/rollouts-demo
+  - name: replicaCount
+    value: "3"
+
+  steps:
+  - uses: git-clone
+    config:
+      repoURL: ${{ vars.repoURL }}
+      checkout:
+      - branch: main
+        path: ./src
+
+  # Determine which of the blue or green service is desired to be
+  # active based on what the ingress is currently pointing to.
+  - uses: yaml-parse
+    as: ingressService
+    config:
+      path: ./src/env/kargo-bgapp-ingress/values.yaml
+      outputs:
+      - name: desired
+        fromExpression: 'ingress.service.name == "app-blue" ? "green" : "blue"'
+      - name: previous
+        fromExpression: 'ingress.service.name == "app-blue" ? "blue" : "green"'
+
+  # Scale up the desired env with new image
+  - uses: yaml-update
+    config:
+      path: ./src/env/kargo-bgapp-${{ task.ingressService.outputs['desired'] }}/values.yaml
+      updates:
+      - key: app.image.tag
+        value: ${{ imageFrom( vars.image ).Tag }}
+      - key: app.image.replicaCount
+        value: ${{ vars.replicaCount }}
+  - uses: git-commit
+    config:
+      path: ./src
+      message: Update kargo-bgapp-${{ task.ingressService.outputs.desired }} to ${{ imageFrom( vars.image ).Tag }} and scale up
+  - uses: git-push
+    config:
+      path: ./src
+  - uses: argocd-update
+    config:
+      apps:
+      - name: kargo-bgapp-${{ task.ingressService.outputs.desired }}
+        sources:
+        - repoURL: ${{ vars.repoURL }}
+
+  # Switch the ingress to point to the new desired app
+  - uses: yaml-update
+    config:
+      path: ./src/env/kargo-bgapp-ingress/values.yaml
+      updates:
+      - key: ingress.service.name
+        value: kargo-bgapp-${{ task.ingressService.outputs.desired }}
+  - uses: git-commit
+    config:
+      path: ./src
+      message: Update ingress to kargo-bgapp-${{ task.ingressService.outputs.desired }}
+  - uses: git-push
+    config:
+      path: ./src
+  - uses: argocd-update
+    config:
+      apps:
+      - name: kargo-bgapp-ingress
+        sources:
+        - repoURL: ${{ vars.repoURL }}
+
+  # Scale down the previous env with new image
+  - uses: yaml-update
+    config:
+      path: ./src/env/kargo-bgapp-${{ task.ingressService.outputs.previous }}/values.yaml
+      updates:
+      - key: app.image.replicaCount
+        value: "0"
+  - uses: git-commit
+    config:
+      path: ./src
+      message: Scale down ${{ task.ingressService.outputs.previous }}
+  - uses: git-push
+    config:
+      path: ./src
+  - uses: argocd-update
+    config:
+      apps:
+      - name: kargo-bgapp-${{ task.ingressService.outputs.previous }}
+        sources:
+        - repoURL: ${{ vars.repoURL }}

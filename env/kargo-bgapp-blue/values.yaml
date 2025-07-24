@@ -1,0 +1,10 @@
+app:
+  fullnameOverride: app-blue
+
+  replicaCount: 3
+
+  podAnnotations:
+    env: blue
+
+  image:
+    tag: blue

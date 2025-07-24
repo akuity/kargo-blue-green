@@ -1,0 +1,10 @@
+ingress:
+  service:
+    name: app-blue
+
+  ingress:
+    hosts:
+      - host: kargo-blue-green.demo.akuity.io
+        paths:
+          - path: /
+            pathType: ImplementationSpecific

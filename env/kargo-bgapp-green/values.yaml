@@ -1,0 +1,10 @@
+app:
+  fullnameOverride: app-green
+
+  replicaCount: 0
+
+  podAnnotations:
+    env: green
+
+  image:
+    tag: green
